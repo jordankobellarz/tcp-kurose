@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+// definindo bool
+typedef int bool;
+#define true 1
+#define false 0
+
 /* ******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: VERSION 1.1  J.F.Kurose
 
@@ -37,12 +43,25 @@ struct pkt {
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
+// último seqnum enviado por A e que foi reconhecido pelo lado B
+int A_last_seqnum_ack;
 
 
 /* called from layer 5, passed the data to be sent to other side */
 A_output(message)
   struct msg message;
 {
+  struct pkt packet;
+
+  packet.seqnum = A_last_seqnum_ack;
+  packet.acknum = 0;// não usado para implementação unidirecional
+  array_cpy(message.data, packet.payload, 20);
+  packet.checksum = get_checksum(packet);
+
+  printf("checksum from A is %d\n", packet.checksum);
+
+  
+
   // encapsular a mensagem em um pkt
     // seqnum = valor do último ACK enviado pelo lado B
     // acknum = não é necessário para a implementação unidirecional
@@ -75,7 +94,8 @@ A_timerinterrupt()
 /* entity A routines are called. You can use it to do any initialization */
 A_init()
 {
-  // iniciar o ackum do lado A
+  // iniciar o seqnum do lado A
+  A_last_seqnum_ack = 1;
 }
 
 
@@ -102,6 +122,35 @@ B_timerinterrupt()
 B_init()
 {
   // iniciar o ackum do lado B
+}
+
+// cria o checksum para um pkt
+get_checksum(packet)
+  struct pkt packet;
+{
+  int i;
+  packet.checksum = packet.seqnum + packet.acknum;
+  for(i=0; i<20; i++)
+    packet.checksum += packet.payload[i];
+  for(i=0; i<20; i++)
+    printf("%d %c\n", i, packet.payload[i]);
+  return packet.checksum;
+}
+
+// valida o checksum de um pkt
+validate_checksum(packet)
+  struct pkt packet;
+{
+  // validar o checksum
+  return true;
+}
+
+// copia uma mensagem para um array ou vice-versa
+array_cpy(char* from, char* to, int size)
+{
+  int i;
+  for(i=0; i<size; i++)
+    to[i] = from[i];
 }
 
 
@@ -435,7 +484,7 @@ struct pkt packet;
 {
  struct pkt *mypktptr;
  struct event *evptr,*q;
- char *malloc();
+ //char *malloc();
  float lastime, x, jimsrand();
  int i;
 
