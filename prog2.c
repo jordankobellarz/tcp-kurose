@@ -7,6 +7,11 @@ typedef int bool;
 #define true 1
 #define false 0
 
+#define A 0
+#define B 1
+
+#define TIMER 1000.0
+
 /* ******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: VERSION 1.1  J.F.Kurose
 
@@ -28,45 +33,57 @@ typedef int bool;
 /* 4 (students' code).  It contains the data (characters) to be delivered */
 /* to layer 5 via the students transport level protocol entities.         */
 struct msg {
-  char data[20];
-  };
+	char data[20];
+};
 
 /* a packet is the data unit passed from layer 4 (students code) to layer */
 /* 3 (teachers code).  Note the pre-defined packet structure, which all   */
 /* students must follow. */
 struct pkt {
-   int seqnum;
-   int acknum;
-   int checksum;
-   char payload[20];
-    };
+	int seqnum;
+	int acknum;
+	int checksum;
+	char payload[20];
+};
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
-// último seqnum enviado por A e que foi reconhecido pelo lado B
-int A_last_seqnum_ack;
+// bit alternante
+bool alternate_bit;
+
+// se está esperando ACK
+bool A_waiting;
+struct pkt A_last_packet_sent;
 
 
 /* called from layer 5, passed the data to be sent to other side */
 A_output(message)
   struct msg message;
 {
-  struct pkt packet;
+	// se A estiver aguardando um ACK
+	if(A_waiting){
+		return -1;
+	} else {
+	  struct pkt packet;
 
-  packet.seqnum = A_last_seqnum_ack;
-  packet.acknum = 0;// não usado para implementação unidirecional
-  array_cpy(message.data, packet.payload, 20);
-  packet.checksum = get_checksum(packet);
+	  alternate_bit = flip(alternate_bit);
 
-  printf("checksum from A is %d\n", packet.checksum);
+	  // encapsula a mensagem em um pkt
+	  packet.seqnum = alternate_bit;
+	  packet.acknum = 0;// não usado (unidirecional)
+	  array_cpy(message.data, packet.payload, 20);
+	  packet.checksum = get_checksum(packet);
 
-  
+	  // aguardando ACK
+	  A_waiting = true;
+	  A_last_packet_sent = packet;
+	 	starttimer(A, TIMER);
 
-  // encapsular a mensagem em um pkt
-    // seqnum = valor do último ACK enviado pelo lado B
-    // acknum = não é necessário para a implementação unidirecional
-    // checksum = somar seqnum + acknum + valor de cada caracter no payload
-  // enviar a mensagem ao layer 3
+	  printf("A \t SEQ%d ---> \t B\n", packet.seqnum);
+
+	  tolayer3(A, packet);
+	}
+	return 1;
 }
 
 B_output(message)  /* need be completed only for extra credit */
@@ -79,70 +96,98 @@ B_output(message)  /* need be completed only for extra credit */
 A_input(packet)
   struct pkt packet;
 {
-  // desencapsular a mensagem
-  // marcar o último ack recebido como o valor do campo acknum
-  // enviar a mensagem para o layer 5
+  struct msg message;
+
+  // se receber o ACK que estava aguardando
+  if(alternate_bit == packet.acknum){
+  	stoptimer(A);
+  	A_waiting = 0;
+  }
 }
 
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-  // reenviar o último pacote
+  // reenvia o último pacote
+  
+  starttimer(A, TIMER);
+
+	printf("A \t SEQ%d ---> \t B\n", A_last_packet_sent.seqnum);
+
+  tolayer3(A, A_last_packet_sent);
 }  
 
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
 A_init()
 {
-  // iniciar o seqnum do lado A
-  A_last_seqnum_ack = 1;
+  alternate_bit = true;
+  A_waiting = false;
 }
 
 
-/* Note that with simplex transfer from a-to-B, there is no B_output() */
+/* Note that with simplex transfer from A-to-B, there is no B_output() */
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 B_input(packet)
   struct pkt packet;
 {
-  // enviar um ACK para o lado A
-  // desencapsular a mensagem
-  // marcar o último ack recebido como o valor do campo acknum
-  // enviar a mensagem para o layer 5
+  struct pkt ack_pkt;
+  struct msg message;
+
+  if(validate_checksum(packet)){
+
+  	printf("A \t <--- ACK%d \t B\n", packet.seqnum);
+
+  	// envia um ACK para o lado A
+	  ack_pkt.acknum = packet.seqnum;
+	  tolayer3(B, ack_pkt);
+  }
+
+  // desencapsula e envia a mensagem para o layer 5
+  array_cpy(packet.payload, message.data, 20);
+  tolayer5(B, message);
 }
 
 /* called when B's timer goes off */
 B_timerinterrupt()
 {
-  // não faço ideia ainda
+  // sem necessidade
 }
 
 /* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 B_init()
 {
-  // iniciar o ackum do lado B
+	// sem necessidade
 }
 
 // cria o checksum para um pkt
 get_checksum(packet)
   struct pkt packet;
 {
-  int i;
-  packet.checksum = packet.seqnum + packet.acknum;
+  int i, checksum;
+
+  checksum = 0;
+
+  checksum = packet.seqnum + packet.acknum;
   for(i=0; i<20; i++)
-    packet.checksum += packet.payload[i];
-  for(i=0; i<20; i++)
-    printf("%d %c\n", i, packet.payload[i]);
-  return packet.checksum;
+    checksum += packet.payload[i];
+  return checksum;
 }
 
 // valida o checksum de um pkt
 validate_checksum(packet)
   struct pkt packet;
 {
-  // validar o checksum
-  return true;
+  return (packet.checksum == get_checksum(packet));
+}
+
+// troca o valor do bit alternante
+flip(alternate_bit)
+	bool alternate_bit;
+{
+	return !alternate_bit;
 }
 
 // copia uma mensagem para um array ou vice-versa
