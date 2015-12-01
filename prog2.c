@@ -1,15 +1,34 @@
+/* ******************************************************************
+	
+	ALUNOS:
+  	Jordan Kobellarz 1516574
+  	Guilherme Riesemberg 147923
+
+**********************************************************************/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 
+// cores para o output
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
 
-// definindo bool
+// tipo booleano
 typedef int bool;
 #define true 1
 #define false 0
 
+// lado A e B
 #define A 0
 #define B 1
 
+// tempo entre envios
 #define TIMER 1000.0
 
 /* ******************************************************************
@@ -51,7 +70,6 @@ struct pkt {
 // bit alternante
 bool alternate_bit;
 
-// se está esperando ACK
 bool A_waiting;
 struct pkt A_last_packet_sent;
 
@@ -77,10 +95,10 @@ A_output(message)
 	  // aguardando ACK
 	  A_waiting = true;
 	  A_last_packet_sent = packet;
-	 	starttimer(A, TIMER);
+	 	
+		printf(ANSI_COLOR_GREEN "A \t SEQ%d ---> \t B\n" ANSI_COLOR_RESET, packet.seqnum);
 
-	  printf("A \t SEQ%d ---> \t B\n", packet.seqnum);
-
+		starttimer(A, TIMER);
 	  tolayer3(A, packet);
 	}
 	return 1;
@@ -98,22 +116,28 @@ A_input(packet)
 {
   struct msg message;
 
-  // se receber o ACK que estava aguardando
-  if(alternate_bit == packet.acknum){
-  	stoptimer(A);
-  	A_waiting = 0;
+  if(validate_checksum(packet)){
+
+  	// se receber o ACK que estava aguardando
+	  if(alternate_bit == packet.acknum){
+	  	stoptimer(A);
+	  	A_waiting = 0;
+	  }
+
+	  // desencapsula e envia a mensagem para o layer 5
+	  array_cpy(packet.payload, message.data, 20);
+	  tolayer5(B, message);
   }
 }
+
 
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
+	printf(ANSI_COLOR_RED "A \t SEQ%d ---> \t B\n" ANSI_COLOR_RESET, A_last_packet_sent.seqnum);
+
   // reenvia o último pacote
-  
-  starttimer(A, TIMER);
-
-	printf("A \t SEQ%d ---> \t B\n", A_last_packet_sent.seqnum);
-
+	starttimer(A, TIMER);
   tolayer3(A, A_last_packet_sent);
 }  
 
@@ -137,10 +161,12 @@ B_input(packet)
 
   if(validate_checksum(packet)){
 
-  	printf("A \t <--- ACK%d \t B\n", packet.seqnum);
+  	printf(ANSI_COLOR_GREEN "A \t <--- ACK%d \t B\n" ANSI_COLOR_RESET, packet.seqnum);
 
   	// envia um ACK para o lado A
 	  ack_pkt.acknum = packet.seqnum;
+	  ack_pkt.checksum = get_checksum(ack_pkt);
+
 	  tolayer3(B, ack_pkt);
   }
 
